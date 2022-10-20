@@ -1,8 +1,8 @@
 #include "raylib.h"
 #include <stdint.h>
 
-#define TILEMAP_SIZE_X 64
-#define TILEMAP_SIZE_Y 48
+#define TILEMAP_SIZE_X 16
+#define TILEMAP_SIZE_Y 16
 #define TILE_PIXELS 16
 #define OUTSIDE_TILE_HORIZONTAL TILE_FULL
 #define OUTSIDE_TILE_VERTICAL TILE_EMPTY
@@ -25,25 +25,50 @@ bool tileIsEmpty(Tile tile) {
     return false;
 }
 
-Tile tilemapGetTile(Tilemap* tilemap, int x, int y) {
-    if (x < 0 || x >= TILEMAP_SIZE_X) return OUTSIDE_TILE_HORIZONTAL;
-    if (y < 0 || y >= TILEMAP_SIZE_Y) return OUTSIDE_TILE_VERTICAL;
+Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
+    if (y < 0 || y >= TILEMAP_SIZE_X) return OUTSIDE_TILE_HORIZONTAL;
+    if (x < 0 || x >= TILEMAP_SIZE_Y) return OUTSIDE_TILE_VERTICAL;
     return (Tile)(*tilemap)[y][x];
 }
 
-Tilemap levelTilemaps[] = {
-    {
+void drawTilemap(const Tilemap* tilemap) {
+    for (int x = 0; x < TILEMAP_SIZE_X; x++) {
+        for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
+            Tile tile = tilemapGetTile(tilemap, x, y);
+            if (tile != TILE_EMPTY && tile != TILE_ZERO) {
+                DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, YELLOW);
+            }
+        }
+    }
+}
 
+int getLevelTilemapIndexFromHeight(float height) {
+    return (height / TILEMAP_SIZE_Y) + 1;
+}
+
+
+const Tilemap levelTilemaps[] = {
+    {
+        // Index zero is empty
+    },
+    {
+        "a a a a a",
+        "a a a a a",
+        "",
+        "ffg   asd",
+        "gg gg ggg",
+        " g gg ggg",
+    },
+    {
+        "gggg",
+        "",
+        "gg gg ggg",
+        " g gg ggg",
     },
 };
 
 int main() {
     // Initialization
-    Tilemap tilemap = {
-        "",
-        "ffg   asd"
-    };
-	
     const int screenWidth = 800;
     const int screenHeight = 450;
 
@@ -66,18 +91,12 @@ int main() {
         // Draw
 		
         BeginDrawing();
-		ClearBackground(RED);
+		ClearBackground(BLACK);
+        int levelTilemapIndex = getLevelTilemapIndexFromHeight(ballPosition.y);
+        Tilemap* tilemap = levelTilemaps[levelTilemapIndex];
+        drawTilemap(&tilemap);
         DrawText("move the ball with arrow keys", 10, 10, 20, GRAY);
         DrawCircleV(ballPosition, 50, WHITE);
-
-        for (int x = 0; x < TILEMAP_SIZE_X; x++) {
-            for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
-                Tile tile = (Tile)tilemap[y][x];
-                if (tile != TILE_EMPTY && tile != TILE_ZERO) {
-                    DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, YELLOW);
-                }
-            }
-        }
 
         EndDrawing();
     }
