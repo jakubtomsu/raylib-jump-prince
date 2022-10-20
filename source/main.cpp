@@ -1,16 +1,35 @@
-#include "raylib.h"
-#include "raymath.h"
+#include "raylib.h" // Base Raylib header
+#include "raymath.h" // Vector math
 #include <stdint.h>
-#include <stdio.h>
+#include <stdio.h> // printf
+#include <assert.h> // for `assert`
 
 #define TILEMAP_SIZE_X 16
 #define TILEMAP_SIZE_Y 12
+// How wide and tall is each tile in pixels
 #define TILE_PIXELS 64
+// What happens when we get out of grid horizontally
 #define OUTSIDE_TILE_HORIZONTAL TILE_FULL
+// What happens when we get out of grid vertically
 #define OUTSIDE_TILE_VERTICAL TILE_EMPTY
+// How much should the box in `resolveBoxCollisionWithTilemap` bounce of off walls.
+// Mainly player uses this to bounce.
+#define BOUNCE_FACTOR_X 0.4f
 
 // Number of items in a static (fixed-size) array
 #define arrayNumItems(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+#define PLAYER_SIZE Vector2{0.3f, 0.4f}
+#define PLAYER_GRAVITY 25.0f
+#define PLAYER_SPEED 40.0f
+#define PLAYER_GROUND_FRICTION_X 50.0f
+#define PLAYER_JUMP_STRENGTH 16.0f
+
+struct Player {
+    Vector2 position;
+    Vector2 velocity;
+    float jumpHoldTime;
+};
 
 enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
 
@@ -18,6 +37,8 @@ enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
 // The '+ 1' is there for string null-termination, because
 // we're defining the tilemaps with strings.
 typedef uint8_t Tilemap[TILEMAP_SIZE_Y][TILEMAP_SIZE_X + 1];
+
+
 
 Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
     if (x < 0 || x >= TILEMAP_SIZE_X) return OUTSIDE_TILE_HORIZONTAL;
@@ -31,6 +52,12 @@ Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
 // close to the upper left corner of the widnow.
 Vector2 worldToScreen(const Vector2 worldSpacePos) {
     return Vector2Scale(worldSpacePos, TILE_PIXELS);
+}
+
+bool tilemapIsTileFull(const Tilemap* tilemap, int x, int y) {
+    const Tile tile = tilemapGetTile(tilemap, x, y);
+    if (tile == TILE_EMPTY || tile == TILE_ZERO) return false;
+    return true;
 }
 
 // Display the tilemap on screen.
@@ -90,10 +117,12 @@ const Tilemap screenTilemaps[] = {
     },
 };
 
+// Get the screen index, where start = 0 and increases when you move up (-Y)
 int getScreenHeightIndex(float height) {
     return floorf(-height / TILEMAP_SIZE_Y);
 }
 
+// Get start and end coordinates of the boxes a bounding box on the tilemap grid
 void getTilesOverlappedByBox(int* outStartX, int* outStartY, int* outEndX, int* outEndY, Vector2 center, const Vector2 size) {
     *outStartX = int(floorf(center.x - size.x));
     *outStartY = int(floorf(center.y - size.y));
@@ -101,23 +130,19 @@ void getTilesOverlappedByBox(int* outStartX, int* outStartY, int* outEndX, int* 
     *outEndY = int(floorf(center.y + size.y));
 }
 
-bool tilemapIsTileFull(const Tilemap* tilemap, int x, int y) {
-    const Tile tile = tilemapGetTile(tilemap, x, y);
-    if (tile == TILE_EMPTY || tile == TILE_ZERO) return false;
-    return true;
-}
 
 // This function takes a box and a tilemap, and tries to make sure the box
 // doesn't intersect with the tilemap.
 // 
 // The method:
-// First, we iterate all of the tiles that *could* be colliding with the box.
-// Next, we calculate the distance between surfaces on each axis.
+// First, we iterate all of the tiles that *could* be colliding with the box (based on the bounding volume).
+// Next, we calculate the distance between near surfaces on each axis.
 // Then we find an axis to 'clip' the position and velocity against.
 // 
 // Note: the `size` is half-extent: it's the vector from the center of the box to it's corner.
 //  It's half the actual width and height of the box.
 void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vector2* center, Vector2* velocity, const Vector2 size) {
+    // Add the offset to center (simply transform into tilemap local-space)
     center->y -= tilemapHeight;
 
     int startX = 0;
@@ -165,22 +190,22 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
                 isClipAxisX = surfDist.x > surfDist.y;
             }
 
-            // Note: this code shouldn't be duplicated, but we can't access the
             // raylib's vector as an array :(
             if (isClipAxisX) {
                 if (center->x > boxPos.x) {
                     // Clamp the position exactly to the surface
                     center->x = boxPos.x + sizeSum.x;
-                    // Clip the velocity
-                    velocity->x = fmaxf(velocity->x, 0.0f);
+                    if (velocity->x < 0.0) {
+                        velocity->x = -velocity->x * BOUNCE_FACTOR_X;
+                    }
                 }
                 else {
                     center->x = boxPos.x - sizeSum.x;
-                    // Clip the velocity
-                    velocity->x = fminf(velocity->x, 0.0f);
+                    if (velocity->x > 0.0) {
+                        velocity->x = -velocity->x * BOUNCE_FACTOR_X;
+                    }
                 }
             }
-            // Exact copy of the branch above, but 'y' instead of 'x'
             else {
                 if (center->y > boxPos.y) {
                     center->y = boxPos.y + sizeSum.y;
@@ -194,6 +219,7 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
         } // y
     } // x
 
+    // Remove the local-space offset
     center->y += tilemapHeight;
 }
 
@@ -235,87 +261,128 @@ bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vect
     return false;
 }
 
-struct Player {
-};
+// Read inputs and update player movement
+void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, float delta) {
+    player->velocity.y += PLAYER_GRAVITY * delta;
+    const bool isOnGround = isBoxCollidingWithTilemap(tilemap, tilemapHeight, { player->position.x, player->position.y + PLAYER_SIZE.y }, { 0.1, 0.05 });
+    if (isOnGround) {
+        player->velocity.x /= 1.0 + delta * PLAYER_GROUND_FRICTION_X;
 
-void updatePlayer() {
+        if (IsKeyReleased(KEY_SPACE)) {
+            // If the player doesn't press anything, the direction is up.
+            Vector2 dir = {0.0f, -1.0f};
+            const float xMoveStrength = 0.5f;
+            if (IsKeyDown(KEY_RIGHT)) dir.x += xMoveStrength;
+            if (IsKeyDown(KEY_LEFT)) dir.x -= xMoveStrength;
+            // Make sure the vector is unit vector (length = 1.0).
+            dir = Vector2Normalize(dir);
+
+            // Calculate strength based on how long the user held down the jump key.
+            // The numbers are kind of random, you play with it yourself.
+            const float jumpStrength = Clamp(player->jumpHoldTime * 3.0, 0.75f, 2.0f) / 2.0f;
+            // Multiply the vector length by the strength factor.
+            dir = Vector2Scale(dir, jumpStrength * PLAYER_JUMP_STRENGTH);
+            // Now apply the jump vector to the actual velocity
+            player->velocity = dir;
+        }
+
+        if (IsKeyDown(KEY_SPACE)) {
+            player->jumpHoldTime += delta;
+        }
+        else {
+            player->jumpHoldTime = 0.0f;
+            if (IsKeyDown(KEY_RIGHT)) player->velocity.x += PLAYER_SPEED * delta;
+            if (IsKeyDown(KEY_LEFT)) player->velocity.x -= PLAYER_SPEED * delta;
+        }
+    }
+    else {
+        player->jumpHoldTime = 0.0f;
+    }
+
+    player->position = Vector2Add(player->position, Vector2Scale(player->velocity, delta));
 }
 
+
+
+// Entry point of the program
+// --------------------------
 int main() {
     // Initialization
+    // --------------
     const int initialScreenWidth = TILEMAP_SIZE_X * TILE_PIXELS;
     const int initialScreenHeight = TILEMAP_SIZE_Y * TILE_PIXELS;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initialScreenWidth, initialScreenHeight, "raylib [core] example - keyboard input");
-    Vector2 playerPosition = { (float)initialScreenWidth / (2 * TILE_PIXELS), (float)initialScreenHeight / (2 * TILE_PIXELS) };
-    Vector2 playerVelocity = {};
-    const Vector2 playerSize = { 0.1, 0.1 };
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
 
     bool isDebugEnabled = false;
 
+    Player player = {};
+    player.position = { (float)initialScreenWidth / (2 * TILE_PIXELS), (float)initialScreenHeight / (2 * TILE_PIXELS) };
+
     // Main game loop
+    // --------------
 
     // `WindowShouldClose` detects window close
     while (!WindowShouldClose()) {
-        const float delta = GetFrameTime();
+        const float delta = Clamp(GetFrameTime(), 0.0001f, 0.1f);
 
-        int screenIndex = arrayNumItems(screenTilemaps) - getScreenHeightIndex(playerPosition.y) - 2;
+        int screenIndex = arrayNumItems(screenTilemaps) - getScreenHeightIndex(player.position.y) - 2;
         if (screenIndex < 0 || screenIndex > arrayNumItems(screenTilemaps)) screenIndex = 0;
 
         const Tilemap* tilemap = &screenTilemaps[screenIndex % arrayNumItems(screenTilemaps)];
-        const int heightIndex = getScreenHeightIndex(playerPosition.y);
+        const int heightIndex = getScreenHeightIndex(player.position.y);
         const float screenOffsetY = -(float)(heightIndex + 1) * TILEMAP_SIZE_Y;
 
         // Update
-        const float playerGravity = 10.0f;
-        playerVelocity.y += playerGravity * delta;
-        if (IsKeyDown(KEY_RIGHT)) playerVelocity.x += 60.0f * delta;
-        if (IsKeyDown(KEY_LEFT)) playerVelocity.x -= 60.0f * delta;
-        if (IsKeyDown(KEY_UP)) playerVelocity.y -= 60.0f * delta;
-        if (IsKeyDown(KEY_DOWN)) playerVelocity.y += 60.0f * delta;
-        playerPosition = Vector2Add(playerPosition, Vector2Scale(playerVelocity, delta));
+        {
+            if (IsKeyPressed(KEY_I)) isDebugEnabled = !isDebugEnabled;
 
-        if (IsKeyPressed(KEY_I)) isDebugEnabled = !isDebugEnabled;
+            updatePlayer(&player, tilemap, screenOffsetY, delta);
 
-        resolveBoxCollisionWithTilemap(tilemap, screenOffsetY, &playerPosition, &playerVelocity, playerSize);
+            resolveBoxCollisionWithTilemap(tilemap, screenOffsetY, &player.position, &player.velocity, PLAYER_SIZE);
+        }
 
         // Draw
+        {
+            BeginDrawing();
 
-        BeginDrawing();
-        ClearBackground(BLACK);
-        drawTilemap(tilemap);
-        if (isDebugEnabled) drawTilemapDebug(tilemap);
-        DrawText("move the ball with arrow keys", 10, 10, 20, GRAY);
-        // Draw player, but relative to current screen
-        DrawCircleV(worldToScreen({ playerPosition.x, playerPosition.y + screenOffsetY }), TILE_PIXELS * playerSize.y, WHITE);
+            ClearBackground(BLACK);
+            drawTilemap(tilemap);
+            if (isDebugEnabled) drawTilemapDebug(tilemap);
+            DrawText("move the ball with arrow keys", 10, 10, 20, GRAY);
+            // Draw player, but relative to current screen
+            DrawCircleV(worldToScreen({ player.position.x, player.position.y + screenOffsetY }), TILE_PIXELS * PLAYER_SIZE.y, WHITE);
 
-        if (isDebugEnabled) {
-            int startX = 0;
-            int startY = 0;
-            int endX = 0;
-            int endY = 0;
-            getTilesOverlappedByBox(&startX, &startY, &endX, &endY, playerPosition, playerSize);
+            if (isDebugEnabled) {
+                int startX = 0;
+                int startY = 0;
+                int endX = 0;
+                int endY = 0;
+                getTilesOverlappedByBox(&startX, &startY, &endX, &endY, player.position, PLAYER_SIZE);
 
-            for (int x = startX; x <= endX; x++) {
-                for (int y = startY; y <= endY; y++) {
-                    DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, Fade(RED, 0.5));
+                for (int x = startX; x <= endX; x++) {
+                    for (int y = startY; y <= endY; y++) {
+                        DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, Fade(RED, 0.5));
+                    }
                 }
             }
-        }
 
-        if (isDebugEnabled) {
-            DrawFPS(1, 1);
-            DrawText(TextFormat("playerPosition = [%f, %f]", playerPosition.x, playerPosition.y), 1, 22, 20, GREEN);
-            DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 44, 20, GREEN);
-            DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 66, 20, GREEN);
-        }
+            if (isDebugEnabled) {
+                DrawFPS(1, 1);
+                DrawText(TextFormat("player.position = [%f, %f]", player.position.x, player.position.y), 1, 22, 20, GREEN);
+                DrawText(TextFormat("player.jumpHoldTime = %f", player.jumpHoldTime), 1, 88, 20, GREEN);
+                DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 44, 20, GREEN);
+                DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 66, 20, GREEN);
+            }
 
-        EndDrawing();
+            EndDrawing();
+        }
     }
 
-    // De-Initialization
+    // Shutdown
+    // --------
 
     CloseWindow(); // Close window and OpenGL context
 
