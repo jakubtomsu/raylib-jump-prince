@@ -1,6 +1,8 @@
 # Jump Prince
 [Jump King](https://store.steampowered.com/app/1061090/Jump_King/) Clone, written in C/C++ and Raylib.
 
+Warning: This is an unfinished game.
+
 The source code is as simple as possible, it should be pretty easy to follow.
 There are many comments to explain (briefly) what's going on.
 It could be a pretty good learning resource for people getting into raylib or C/C++ game development in general.
