@@ -19,11 +19,14 @@
 // Number of items in a static (fixed-size) array
 #define arrayNumItems(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+// Half-size of the player's box collider.
 #define PLAYER_SIZE Vector2{0.3f, 0.4f}
+// Gravity in units (tiles) per second
 #define PLAYER_GRAVITY 32.0f
+// How fast player accelerates.
 #define PLAYER_SPEED 75.0f
 #define PLAYER_GROUND_FRICTION_X 70.0f
-#define PLAYER_JUMP_STRENGTH 16.0f
+#define PLAYER_JUMP_STRENGTH 18.0f
 
 struct Player {
     Vector2 position;
@@ -65,7 +68,7 @@ void drawTilemap(const Tilemap* tilemap) {
     for (int x = 0; x < TILEMAP_SIZE_X; x++) {
         for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
             if (!tilemapIsTileFull(tilemap, x, y)) continue;
-            DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, YELLOW);
+            DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, ORANGE);
         }
     }
 }
@@ -74,45 +77,61 @@ void drawTilemapDebug(const Tilemap* tilemap) {
     for (int x = 0; x < TILEMAP_SIZE_X; x++) {
         for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
             Tile tile = tilemapGetTile(tilemap, x, y);
-            DrawTextEx(GetFontDefault(), TextFormat("[%i,%i]\n%c", x, y, tile),
+            DrawTextEx(GetFontDefault(), TextFormat("[%i,%i]\n%i\n\'%c\'", x, y, tile, tile),
                 Vector2Add(worldToScreen(Vector2{ (float)x, (float)y }), { 1, 1 }),
-                10, 1, BLACK);
+                10, 1, RED);
         }
     }
 }
 
 
+// Note: starts at the bottom, so it looks continuous
 const Tilemap screenTilemaps[] = {
     {
         // Index zero is empty
         // This index is reserved for 'invalid tilemap'
     },
     {
-        "0123456789012345",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
+        "#  ########    #",
+        "# ##      ##   #",
+        "# # #####  ### #",
+        "# # #   #  # # #",
+        "# # #####  # # #",
+        "# #        # # #",
+        "# #        # # #",
+        "# #        ### #",
+        "# #  ####  #   #",
+        "# #  #  #  #   #",
+        "# ####  ####   #",
+        "####      ######",
     },
     {
-        "gggg",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "#",
-        "# #        # #",
-        "#    ##   ###",
+        "####      ######",
+        "###        #####",
+        "###  ###    ####",
+        "###  ##     ####",
+        "###       ######",
+        "###    #########",
+        "###  #    ######",
+        "###        #####",
+        "###         ####",
+        "##  ##      ####",
+        "##        ######",
+        "##        ######",
+    },
+    // Starting screen:
+    {
+        "##        ######",
+        "######       ###",
+        "######        ##",
+        "######     #####",
+        "##       #######",
+        "#              #",
+        "#  #######     #",
+        "#  #######     #",
+        "#     ##       #",
+        "###        # # #",
+        "#### ##   ###  #",
         "################",
     },
 };
@@ -274,11 +293,11 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
         if (IsKeyReleased(KEY_SPACE)) {
             // Calculate strength based on how long the user held down the jump key.
             // The numbers are kind of random, you play with it yourself.
-            const float jumpStrength = Clamp(player->jumpHoldTime * 2.2f, 0.75f, 2.0f) / 2.0f;
+            const float jumpStrength = Clamp(player->jumpHoldTime * 3.0f, 1.1f, 2.0f) / 2.0f;
 
             // If the player doesn't press anything, the direction is up.
             Vector2 dir = {0.0f, -1.0f};
-            const float xMoveStrength = 0.8f - (jumpStrength * 0.4f);
+            const float xMoveStrength = 0.75f - (jumpStrength * 0.35f);
             if (IsKeyDown(KEY_RIGHT)) dir.x += xMoveStrength;
             if (IsKeyDown(KEY_LEFT)) dir.x -= xMoveStrength;
             // Make sure the vector is unit vector (length = 1.0).
@@ -310,16 +329,16 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
 
 // Entry point of the program
 // --------------------------
-int main() {
+int main(const char** argv, int argc) {
     // Initialization
     // --------------
+
     const int initialScreenWidth = TILEMAP_SIZE_X * TILE_PIXELS;
     const int initialScreenHeight = TILEMAP_SIZE_Y * TILE_PIXELS;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initialScreenWidth, initialScreenHeight, "raylib [core] example - keyboard input");
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
-
     bool isDebugEnabled = false;
 
     Player player = {};
@@ -342,9 +361,7 @@ int main() {
         // Update
         {
             if (IsKeyPressed(KEY_I)) isDebugEnabled = !isDebugEnabled;
-
             updatePlayer(&player, tilemap, screenOffsetY, delta);
-
             resolveBoxCollisionWithTilemap(tilemap, screenOffsetY, &player.position, &player.velocity, PLAYER_SIZE);
         }
 
@@ -352,14 +369,12 @@ int main() {
         {
             BeginDrawing();
 
-            ClearBackground(BLACK);
+            ClearBackground({ 30, 30, 40, 255 });
             drawTilemap(tilemap);
-            if (isDebugEnabled) drawTilemapDebug(tilemap);
-            DrawText("move the ball with arrow keys", 10, 10, 20, GRAY);
-            // Draw player, but relative to current screen
-            DrawCircleV(worldToScreen({ player.position.x, player.position.y + screenOffsetY }), TILE_PIXELS * PLAYER_SIZE.y, WHITE);
 
             if (isDebugEnabled) {
+                drawTilemapDebug(tilemap);
+
                 int startX = 0;
                 int startY = 0;
                 int endX = 0;
@@ -372,6 +387,9 @@ int main() {
                     }
                 }
             }
+
+            // Draw player, but relative to current screen
+            DrawCircleV(worldToScreen({ player.position.x, player.position.y - screenOffsetY }), TILE_PIXELS * PLAYER_SIZE.y, WHITE);
 
             if (isDebugEnabled) {
                 DrawFPS(1, 1);
