@@ -20,9 +20,9 @@
 #define arrayNumItems(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define PLAYER_SIZE Vector2{0.3f, 0.4f}
-#define PLAYER_GRAVITY 25.0f
-#define PLAYER_SPEED 40.0f
-#define PLAYER_GROUND_FRICTION_X 50.0f
+#define PLAYER_GRAVITY 32.0f
+#define PLAYER_SPEED 75.0f
+#define PLAYER_GROUND_FRICTION_X 70.0f
 #define PLAYER_JUMP_STRENGTH 16.0f
 
 struct Player {
@@ -157,6 +157,7 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
         for (int y = startY; y <= endY; y++) {
             // Skip if non-empty
             if (!tilemapIsTileFull(tilemap, x, y)) continue;
+
             // Center of the tile box
             const Vector2 boxPos = { 0.5f + (float)x, 0.5f + (float)y };
             const Vector2 sizeSum = { size.x + 0.5f, size.y + 0.5 };
@@ -190,7 +191,7 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
                 isClipAxisX = surfDist.x > surfDist.y;
             }
 
-            // raylib's vector as an array :(
+            // Clip the velocity (or bounce) based on the axis
             if (isClipAxisX) {
                 if (center->x > boxPos.x) {
                     // Clamp the position exactly to the surface
@@ -243,6 +244,7 @@ bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vect
         for (int y = startY; y <= endY; y++) {
             // Skip if non-empty
             if (!tilemapIsTileFull(tilemap, x, y)) continue;
+
             // Center of the tile box
             const Vector2 boxPos = { 0.5f + (float)x, 0.5f + (float)y };
             const Vector2 sizeSum = { size.x + 0.5f, size.y + 0.5 };
@@ -258,6 +260,7 @@ bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vect
             return true;
         } // y
     } // x
+
     return false;
 }
 
@@ -269,17 +272,18 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
         player->velocity.x /= 1.0 + delta * PLAYER_GROUND_FRICTION_X;
 
         if (IsKeyReleased(KEY_SPACE)) {
+            // Calculate strength based on how long the user held down the jump key.
+            // The numbers are kind of random, you play with it yourself.
+            const float jumpStrength = Clamp(player->jumpHoldTime * 2.2f, 0.75f, 2.0f) / 2.0f;
+
             // If the player doesn't press anything, the direction is up.
             Vector2 dir = {0.0f, -1.0f};
-            const float xMoveStrength = 0.5f;
+            const float xMoveStrength = 0.8f - (jumpStrength * 0.4f);
             if (IsKeyDown(KEY_RIGHT)) dir.x += xMoveStrength;
             if (IsKeyDown(KEY_LEFT)) dir.x -= xMoveStrength;
             // Make sure the vector is unit vector (length = 1.0).
             dir = Vector2Normalize(dir);
 
-            // Calculate strength based on how long the user held down the jump key.
-            // The numbers are kind of random, you play with it yourself.
-            const float jumpStrength = Clamp(player->jumpHoldTime * 3.0, 0.75f, 2.0f) / 2.0f;
             // Multiply the vector length by the strength factor.
             dir = Vector2Scale(dir, jumpStrength * PLAYER_JUMP_STRENGTH);
             // Now apply the jump vector to the actual velocity
