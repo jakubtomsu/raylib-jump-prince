@@ -73,18 +73,20 @@ void drawTilemap(const Tilemap* tilemap) {
     }
 }
 
+// Draw helpful info about the tilemap.
 void drawTilemapDebug(const Tilemap* tilemap) {
     for (int x = 0; x < TILEMAP_SIZE_X; x++) {
         for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
             Tile tile = tilemapGetTile(tilemap, x, y);
             DrawTextEx(GetFontDefault(), TextFormat("[%i,%i]\n%i\n\'%c\'", x, y, tile, tile),
-                Vector2Add(worldToScreen(Vector2{ (float)x, (float)y }), { 1, 1 }),
+                Vector2Add(worldToScreen(Vector2{ (float)x, (float)y }), { 3, 3 }),
                 10, 1, RED);
         }
     }
 }
 
 
+// List of tilemaps for each screen in the level.
 // Note: starts at the bottom, so it looks continuous
 const Tilemap screenTilemaps[] = {
     {
@@ -391,12 +393,14 @@ int main(const char** argv, int argc) {
             // Draw player, but relative to current screen
             DrawCircleV(worldToScreen({ player.position.x, player.position.y - screenOffsetY }), TILE_PIXELS * PLAYER_SIZE.y, WHITE);
 
+            DrawText("Move with Left/Right Arrows.\nPress 'I' to enable debug mode", 4, 24, 20, WHITE);
+
             if (isDebugEnabled) {
                 DrawFPS(1, 1);
-                DrawText(TextFormat("player.position = [%f, %f]", player.position.x, player.position.y), 1, 22, 20, GREEN);
-                DrawText(TextFormat("player.jumpHoldTime = %f", player.jumpHoldTime), 1, 88, 20, GREEN);
-                DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 44, 20, GREEN);
-                DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 66, 20, GREEN);
+                DrawText(TextFormat("player.position = [%f, %f]", player.position.x, player.position.y), 1, 110, 20, WHITE);
+                DrawText(TextFormat("player.jumpHoldTime = %f", player.jumpHoldTime), 1, 88, 20, WHITE);
+                DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 22*6, 20, WHITE);
+                DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 22*7, 20, WHITE);
             }
 
             EndDrawing();
