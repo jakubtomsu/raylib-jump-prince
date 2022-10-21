@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h> // printf
 #include <assert.h> // for `assert`
+#include <string.h>
 
 #define TILEMAP_SIZE_X 16
 #define TILEMAP_SIZE_Y 12
@@ -329,7 +330,7 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
 
 // Entry point of the program
 // --------------------------
-int main(const char** argv, int argc) {
+int main(int argc, const char* argv[]) {
     // Initialization
     // --------------
 
@@ -339,8 +340,16 @@ int main(const char** argv, int argc) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initialScreenWidth, initialScreenHeight, "raylib [core] example - keyboard input");
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
-    bool isDebugEnabled = false;
+    // Set the Current Working Directory to the .exe folder
+    {
+        int numSplit = 0;
+        const char** split = TextSplit(argv[0], '\\', &numSplit);
+        const char* path = TextJoin(split, numSplit - 1, "\\");
+        printf("load path = %s\n", path);
+        ChangeDirectory(path);
+    }
 
+    bool isDebugEnabled = false;
     Player player = {};
     player.position = { (float)initialScreenWidth / (2 * TILE_PIXELS), (float)initialScreenHeight / (2 * TILE_PIXELS) };
 
