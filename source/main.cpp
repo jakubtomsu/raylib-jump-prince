@@ -29,12 +29,16 @@
 #define PLAYER_GROUND_FRICTION_X 70.0f
 #define PLAYER_JUMP_STRENGTH 18.0f
 
+// Data for the player.
 struct Player {
     Vector2 position;
     Vector2 velocity;
     float jumpHoldTime;
 };
 
+// Type of a tile.
+// Eeach tile is identified by a single character,
+// this is helpful for designing the levels in text form.
 enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
 
 // Tilemap is a grid of tiles (`Tile` enums, stored as unsigned bytes).
@@ -42,8 +46,7 @@ enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
 // we're defining the tilemaps with strings.
 typedef uint8_t Tilemap[TILEMAP_SIZE_Y][TILEMAP_SIZE_X + 1];
 
-
-
+// Returns a tile from the tilemap, at a [x, y] coordinate.
 Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
     if (x < 0 || x >= TILEMAP_SIZE_X) return OUTSIDE_TILE_HORIZONTAL;
     if (y < 0 || y >= TILEMAP_SIZE_Y) return OUTSIDE_TILE_VERTICAL;
@@ -58,6 +61,8 @@ Vector2 worldToScreen(const Vector2 worldSpacePos) {
     return Vector2Scale(worldSpacePos, TILE_PIXELS);
 }
 
+// Check if a tile on a [x, y] coordinate is empty/full.
+// Note: The tile collision uses this too
 bool tilemapIsTileFull(const Tilemap* tilemap, int x, int y) {
     const Tile tile = tilemapGetTile(tilemap, x, y);
     if (tile == TILE_EMPTY || tile == TILE_ZERO) return false;
@@ -74,6 +79,7 @@ void drawTilemap(const Tilemap* tilemap) {
     }
 }
 
+// Display debug information about each tile in the tilemap
 void drawTilemapDebug(const Tilemap* tilemap) {
     for (int x = 0; x < TILEMAP_SIZE_X; x++) {
         for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
@@ -154,6 +160,12 @@ void getTilesOverlappedByBox(int* outStartX, int* outStartY, int* outEndX, int* 
 // This function takes a box and a tilemap, and tries to make sure the box
 // doesn't intersect with the tilemap.
 // 
+// param `tilemap`: the tilemap to collide with.
+// param `tilemapHeight`: Y (vertical) offset of the tilemap.
+// param `center`: center point of the box, this can be changed by this function.
+// param `velocity`: velocity of the box. It can get clipped on overlap.
+// param `size`: half-size of the box
+// 
 // The method:
 // First, we iterate all of the tiles that *could* be colliding with the box (based on the bounding volume).
 // Next, we calculate the distance between near surfaces on each axis.
@@ -216,6 +228,7 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
                 if (center->x > boxPos.x) {
                     // Clamp the position exactly to the surface
                     center->x = boxPos.x + sizeSum.x;
+                    // Bounce away (but only if moving towards the edge)
                     if (velocity->x < 0.0) {
                         velocity->x = -velocity->x * BOUNCE_FACTOR_X;
                     }
@@ -245,11 +258,12 @@ void resolveBoxCollisionWithTilemap(const Tilemap* tilemap, float tilemapHeight,
 }
 
 // Checks whether the box is intersecting any tile in the tilemap.
+// 
 // param `tilemap`: tilemap to check
 // param `tilemapHeight`: offset of the tilemap along the Y axis
 // param `center`: coordinate of the center of the box
 // param `size`: half-extent of the box - half the box sides
-bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vector2 center, const Vector2 size) {
+bool isBoxCollidingWithTilemap(const Tilemap* tilemap, const float tilemapHeight, Vector2 center, const Vector2 size) {
     center.y -= tilemapHeight;
 
     int startX = 0;
@@ -285,7 +299,7 @@ bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vect
 }
 
 // Read inputs and update player movement
-void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, float delta) {
+void updatePlayer(Player* player, const Tilemap* tilemap, const float tilemapHeight, const float delta) {
     player->velocity.y += PLAYER_GRAVITY * delta;
     const bool isOnGround = isBoxCollidingWithTilemap(tilemap, tilemapHeight, { player->position.x, player->position.y + PLAYER_SIZE.y }, { 0.1, 0.05 });
     if (isOnGround) {
@@ -352,6 +366,7 @@ int main(int argc, const char* argv[]) {
     while (!WindowShouldClose()) {
         const float delta = Clamp(GetFrameTime(), 0.0001f, 0.1f);
 
+        // Bottom to top, so the first screen is at the end of the array!
         int screenIndex = arrayNumItems(screenTilemaps) - getScreenHeightIndex(player.position.y) - 2;
         if (screenIndex < 0 || screenIndex > arrayNumItems(screenTilemaps)) screenIndex = 0;
 
