@@ -340,14 +340,6 @@ int main(int argc, const char* argv[]) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initialScreenWidth, initialScreenHeight, "raylib [core] example - keyboard input");
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
-    // Set the Current Working Directory to the .exe folder
-    {
-        int numSplit = 0;
-        const char** split = TextSplit(argv[0], '\\', &numSplit);
-        const char* path = TextJoin(split, numSplit - 1, "\\");
-        printf("load path = %s\n", path);
-        ChangeDirectory(path);
-    }
 
     bool isDebugEnabled = false;
     Player player = {};
