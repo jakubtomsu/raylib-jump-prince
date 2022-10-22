@@ -14,7 +14,7 @@
 #define OUTSIDE_TILE_VERTICAL TILE_EMPTY
 // How much should the box in `resolveBoxCollisionWithTilemap` bounce of off walls.
 // Mainly player uses this to bounce.
-#define BOUNCE_FACTOR_X 0.4f
+#define BOUNCE_FACTOR_X 0.45f
 
 #define VIEW_PIXELS_X (TILEMAP_SIZE_X * TILE_PIXELS)
 #define VIEW_PIXELS_Y (TILEMAP_SIZE_Y * TILE_PIXELS)
@@ -470,8 +470,8 @@ int main(int argc, const char** argv) {
 
                             if (topRight == TILE_FULL && bottomRight == TILE_FULL &&
                                 topLeft == TILE_FULL && bottomLeft != TILE_FULL) {
-                                spriteX = 0;
-                                spriteY = 2;
+                                spriteX = 6;
+                                spriteY = 0;
                             }
                         }
 
@@ -489,7 +489,7 @@ int main(int argc, const char** argv) {
                 player.animTime += delta;
 
                 if (player.isOnGround) {
-                    sprite = 2;
+                    sprite = 0;
 
                     if (fabsf(player.velocity.x) > 0.01) {
                         sprite = 1 + ((int)floorf(player.animTime * 6.0f)) % 2;
@@ -505,8 +505,6 @@ int main(int argc, const char** argv) {
 
                 drawSpriteSheetTile(playerTexture, sprite, 0, 16, Vector2Subtract(worldToScreen({ player.position.x, player.position.y - screenOffsetY}), { 8, 10 }), {(float)(player.isFacingRight ? 1 : -1), 1});
             }
-
-            DrawText("Move with Left/Right Arrows.\nPress 'I' to enable debug mode", 4, 24, 20, WHITE);
 
             EndTextureMode();
         }
