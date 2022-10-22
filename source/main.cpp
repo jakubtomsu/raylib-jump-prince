@@ -7,7 +7,7 @@
 #define TILEMAP_SIZE_X 16
 #define TILEMAP_SIZE_Y 12
 // How wide and tall is each tile in pixels
-#define TILE_PIXELS 64
+#define TILE_PIXELS 16
 // What happens when we get out of grid horizontally
 #define OUTSIDE_TILE_HORIZONTAL TILE_FULL
 // What happens when we get out of grid vertically
@@ -15,6 +15,10 @@
 // How much should the box in `resolveBoxCollisionWithTilemap` bounce of off walls.
 // Mainly player uses this to bounce.
 #define BOUNCE_FACTOR_X 0.4f
+
+#define VIEW_PIXELS_X (TILEMAP_SIZE_X * TILE_PIXELS)
+#define VIEW_PIXELS_Y (TILEMAP_SIZE_Y * TILE_PIXELS)
+#define BACKGROUND_COLOR Color{ 15, 5, 45, 255 }
 
 // Number of items in a static (fixed-size) array
 #define arrayNumItems(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -24,7 +28,7 @@
 // Gravity in units (tiles) per second
 #define PLAYER_GRAVITY 32.0f
 // How fast player accelerates.
-#define PLAYER_SPEED 75.0f
+#define PLAYER_SPEED 200.0f
 #define PLAYER_GROUND_FRICTION_X 70.0f
 #define PLAYER_JUMP_STRENGTH 18.0f
 
@@ -32,6 +36,9 @@ struct Player {
     Vector2 position;
     Vector2 velocity;
     float jumpHoldTime;
+    float animTime;
+    bool isOnGround;
+    bool isFacingRight;
 };
 
 enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
@@ -49,6 +56,12 @@ Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
     return (Tile)(*tilemap)[y][x];
 }
 
+Tile tilemapGetTileFullOutside(const Tilemap* tilemap, int x, int y) {
+    if (x < 0 || x >= TILEMAP_SIZE_X) return TILE_FULL;
+    if (y < 0 || y >= TILEMAP_SIZE_Y) return TILE_FULL;
+    return (Tile)(*tilemap)[y][x];
+}
+
 // Converts a center (vector) from world-space to screen-space.
 // In world-space one unit is one tile in size, so coordinate [1, 1] means tile at this coordinate.
 // On the other hand, in screen-space, one unit is a pixel. [1, 1] would just mean the pixel
@@ -61,28 +74,6 @@ bool tilemapIsTileFull(const Tilemap* tilemap, int x, int y) {
     const Tile tile = tilemapGetTile(tilemap, x, y);
     if (tile == TILE_EMPTY || tile == TILE_ZERO) return false;
     return true;
-}
-
-// Display the tilemap on screen.
-void drawTilemap(const Tilemap* tilemap) {
-    for (int x = 0; x < TILEMAP_SIZE_X; x++) {
-        for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
-            if (!tilemapIsTileFull(tilemap, x, y)) continue;
-            DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, ORANGE);
-        }
-    }
-}
-
-// Draw helpful info about the tilemap.
-void drawTilemapDebug(const Tilemap* tilemap) {
-    for (int x = 0; x < TILEMAP_SIZE_X; x++) {
-        for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
-            Tile tile = tilemapGetTile(tilemap, x, y);
-            DrawTextEx(GetFontDefault(), TextFormat("[%i,%i]\n%i\n\'%c\'", x, y, tile, tile),
-                Vector2Add(worldToScreen(Vector2{ (float)x, (float)y }), { 3, 3 }),
-                10, 1, RED);
-        }
-    }
 }
 
 
@@ -129,11 +120,11 @@ const Tilemap screenTilemaps[] = {
         "######     #####",
         "##       #######",
         "#              #",
-        "#  #######     #",
-        "#  #######     #",
-        "#     ##       #",
-        "###        # # #",
-        "#### ##   ###  #",
+        "#  #######   # #",
+        "#  ##    #   # #",
+        "#     ##     ###",
+        "###      # #####",
+        "#### #     #####",
         "################",
     },
 };
@@ -288,17 +279,24 @@ bool isBoxCollidingWithTilemap(const Tilemap* tilemap, float tilemapHeight, Vect
 // Read inputs and update player movement
 void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, float delta) {
     player->velocity.y += PLAYER_GRAVITY * delta;
-    const bool isOnGround = isBoxCollidingWithTilemap(tilemap, tilemapHeight, { player->position.x, player->position.y + PLAYER_SIZE.y }, { 0.1, 0.05 });
+    const bool isOnGround = isBoxCollidingWithTilemap(
+        tilemap,
+        tilemapHeight,
+        { player->position.x, player->position.y + PLAYER_SIZE.y },
+        { 0.1, 0.05 });
+
+    player->isOnGround = isOnGround;
+
     if (isOnGround) {
-        player->velocity.x /= 1.0 + delta * PLAYER_GROUND_FRICTION_X;
+        player->velocity.x = 0;
 
         if (IsKeyReleased(KEY_SPACE)) {
             // Calculate strength based on how long the user held down the jump key.
             // The numbers are kind of random, you play with it yourself.
-            const float jumpStrength = Clamp(player->jumpHoldTime * 3.0f, 1.1f, 2.0f) / 2.0f;
+            const float jumpStrength = Clamp(player->jumpHoldTime * 2.5f, 1.1f, 2.0f) / 2.0f;
 
             // If the player doesn't press anything, the direction is up.
-            Vector2 dir = {0.0f, -1.0f};
+            Vector2 dir = { 0.0f, -1.0f };
             const float xMoveStrength = 0.75f - (jumpStrength * 0.35f);
             if (IsKeyDown(KEY_RIGHT)) dir.x += xMoveStrength;
             if (IsKeyDown(KEY_LEFT)) dir.x -= xMoveStrength;
@@ -316,8 +314,18 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
         }
         else {
             player->jumpHoldTime = 0.0f;
-            if (IsKeyDown(KEY_RIGHT)) player->velocity.x += PLAYER_SPEED * delta;
-            if (IsKeyDown(KEY_LEFT)) player->velocity.x -= PLAYER_SPEED * delta;
+            if (IsKeyDown(KEY_RIGHT)) {
+                player->velocity.x += PLAYER_SPEED * delta;
+                player->isFacingRight = true;
+            }
+            if (IsKeyDown(KEY_LEFT)) {
+                player->velocity.x -= PLAYER_SPEED * delta;
+                player->isFacingRight = false;
+            }
+
+            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_LEFT)) {
+                player->animTime = 0;
+            }
         }
     }
     else {
@@ -327,11 +335,18 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
     player->position = Vector2Add(player->position, Vector2Scale(player->velocity, delta));
 }
 
+void drawSpriteSheetTile(const Texture texture, const int spriteX, const int spriteY, const int spriteSize,
+    const Vector2 position, const Vector2 scale = { 1, 1 }) {
+    DrawTextureRec(
+        texture,
+        { (float)(spriteX * spriteSize), (float)(spriteY * spriteSize), (float)spriteSize * scale.x, (float)spriteSize * scale.y},
+        position, WHITE);
+}
 
 
 // Entry point of the program
 // --------------------------
-int main(const char** argv, int argc) {
+int main(int argc, const char** argv) {
     // Initialization
     // --------------
 
@@ -339,12 +354,29 @@ int main(const char** argv, int argc) {
     const int initialScreenHeight = TILEMAP_SIZE_Y * TILE_PIXELS;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(initialScreenWidth, initialScreenHeight, "raylib [core] example - keyboard input");
+    InitWindow(initialScreenWidth * 3, initialScreenHeight * 3, "raylib [core] example - keyboard input");
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
+
+    // Set the Current Working Directory to the .exe folder
+    {
+        int numSplit = 0;
+        const char** split = TextSplit(argv[0], '\\', &numSplit);
+        const char* path = TextJoin(split, numSplit - 1, "\\");
+        printf("load path = %s\n", path);
+        ChangeDirectory(path);
+    }
+
     bool isDebugEnabled = false;
 
     Player player = {};
-    player.position = { (float)initialScreenWidth / (2 * TILE_PIXELS), (float)initialScreenHeight / (2 * TILE_PIXELS) };
+    player.position = {
+        (float)initialScreenWidth / (2 * TILE_PIXELS),
+        (float)initialScreenHeight / (2 * TILE_PIXELS) };
+
+    Texture playerTexture = LoadTexture("player.png");
+    Texture tilemapTexture = LoadTexture("tilemap.png");
+
+    RenderTexture pixelartRenderTexture = LoadRenderTexture(VIEW_PIXELS_X, VIEW_PIXELS_Y);
 
     // Main game loop
     // --------------
@@ -365,42 +397,171 @@ int main(const char** argv, int argc) {
             if (IsKeyPressed(KEY_I)) isDebugEnabled = !isDebugEnabled;
             updatePlayer(&player, tilemap, screenOffsetY, delta);
             resolveBoxCollisionWithTilemap(tilemap, screenOffsetY, &player.position, &player.velocity, PLAYER_SIZE);
+
+            // Minimum window size
+            if (GetScreenWidth() < VIEW_PIXELS_X) {
+                SetWindowSize(VIEW_PIXELS_X, GetScreenHeight());
+            }
+            if (GetScreenHeight() < VIEW_PIXELS_Y) {
+                SetWindowSize(GetScreenWidth(), VIEW_PIXELS_Y);
+            }
         }
 
-        // Draw
+        // Draw world to pixelart texture
+        {
+            BeginTextureMode(pixelartRenderTexture);
+            ClearBackground(BACKGROUND_COLOR);
+
+            // Draw tilemap
+            for (int x = 0; x < TILEMAP_SIZE_X; x++) {
+                for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
+                    if (!tilemapIsTileFull(tilemap, x, y)) continue;
+                    // DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, ORANGE);
+
+                    const Tile tile = tilemapGetTileFullOutside(tilemap, x, y);
+                    // Neighbors
+                    const Tile top = tilemapGetTileFullOutside(tilemap, x, y - 1);
+                    const Tile bottom = tilemapGetTileFullOutside(tilemap, x, y + 1);
+                    const Tile right = tilemapGetTileFullOutside(tilemap, x + 1, y);
+                    const Tile left = tilemapGetTileFullOutside(tilemap, x - 1, y);
+                    const Tile topRight = tilemapGetTileFullOutside(tilemap, x + 1, y - 1);
+                    const Tile bottomRight = tilemapGetTileFullOutside(tilemap, x + 1, y + 1);
+                    const Tile topLeft = tilemapGetTileFullOutside(tilemap, x - 1, y - 1);
+                    const Tile bottomLeft = tilemapGetTileFullOutside(tilemap, x - 1, y + 1);
+
+                    int spriteX = 0;
+                    int spriteY = 0;
+
+                    switch (tile) {
+                    case TILE_FULL: {
+                        spriteX = 1;
+                        spriteY = 1;
+                        if (top == TILE_FULL) spriteY += 1;
+                        if (bottom == TILE_FULL) spriteY -= 1;
+                        if (right == TILE_FULL) spriteX -= 1;
+                        if (left == TILE_FULL) spriteX += 1;
+
+                        if (top != TILE_FULL && bottom != TILE_FULL && right != TILE_FULL && left != TILE_FULL) {
+                            spriteX = 3;
+                            spriteY = 3;
+                        }
+
+                        if (left != TILE_FULL && right != TILE_FULL && spriteX == 1) spriteX = 3;
+                        if (top != TILE_FULL && bottom != TILE_FULL && spriteY == 1) spriteY = 3;
+
+                        if (spriteX == 1 && spriteY == 1) {
+                            if (topRight != TILE_FULL && bottomRight == TILE_FULL &&
+                                topLeft == TILE_FULL && bottomLeft == TILE_FULL) {
+                                spriteX = 4;
+                                spriteY = 2;
+                            }
+
+                            if (topRight == TILE_FULL && bottomRight != TILE_FULL &&
+                                topLeft == TILE_FULL && bottomLeft == TILE_FULL) {
+                                spriteX = 4;
+                                spriteY = 0;
+                            }
+
+                            if (topRight == TILE_FULL && bottomRight == TILE_FULL &&
+                                topLeft != TILE_FULL && bottomLeft == TILE_FULL) {
+                                spriteX = 6;
+                                spriteY = 2;
+                            }
+
+                            if (topRight == TILE_FULL && bottomRight == TILE_FULL &&
+                                topLeft == TILE_FULL && bottomLeft != TILE_FULL) {
+                                spriteX = 0;
+                                spriteY = 2;
+                            }
+                        }
+
+                    } break;
+                    }
+
+                    drawSpriteSheetTile(tilemapTexture, spriteX, spriteY, TILE_PIXELS, { (float)x * TILE_PIXELS, (float)y * TILE_PIXELS });
+                }
+            }
+
+            // Draw player, but relative to current screen
+            {
+                int sprite = 0;
+
+                player.animTime += delta;
+
+                if (player.isOnGround) {
+                    sprite = 2;
+
+                    if (fabsf(player.velocity.x) > 0.01) {
+                        sprite = 1 + ((int)floorf(player.animTime * 6.0f)) % 2;
+                    }
+
+                    if (player.jumpHoldTime > 0.001) {
+                        sprite = 4;
+                    }
+                }
+                else {
+                    sprite = player.velocity.y > 0 ? 5 : 6;
+                }
+
+                drawSpriteSheetTile(playerTexture, sprite, 0, 16, Vector2Subtract(worldToScreen({ player.position.x, player.position.y - screenOffsetY}), { 8, 10 }), {(float)(player.isFacingRight ? 1 : -1), 1});
+            }
+
+            DrawText("Move with Left/Right Arrows.\nPress 'I' to enable debug mode", 4, 24, 20, WHITE);
+
+            EndTextureMode();
+        }
+
+        // Finalize drawing
         {
             BeginDrawing();
+            ClearBackground(BLACK);
 
-            ClearBackground({ 30, 30, 40, 255 });
-            drawTilemap(tilemap);
+            const Vector2 window = { (float)GetScreenWidth(), (float)GetScreenHeight() };
+            const float scale = fmaxf(1.0f, floorf(fminf(window.x / VIEW_PIXELS_X, window.y / VIEW_PIXELS_Y)));
+            const Vector2 size = { scale * VIEW_PIXELS_X, scale * VIEW_PIXELS_Y };
+            const Vector2 offset = Vector2Scale(Vector2Subtract(window, size), 0.5);
+
+            DrawTexturePro(
+                pixelartRenderTexture.texture,
+                { 0, 0, (float)pixelartRenderTexture.texture.width, -(float)pixelartRenderTexture.texture.height },
+                { offset.x, offset.y, size.x, size.y },
+                {}, 0, WHITE);
 
             if (isDebugEnabled) {
-                drawTilemapDebug(tilemap);
+                // Draw tilemap debug info
+                for (int x = 0; x < TILEMAP_SIZE_X; x++) {
+                    for (int y = 0; y < TILEMAP_SIZE_Y; y++) {
+                        Tile tile = tilemapGetTile(tilemap, x, y);
+                        DrawTextEx(GetFontDefault(), TextFormat("[%i,%i]\n%i\n\'%c\'", x, y, tile, tile),
+                            Vector2Add(worldToScreen(Vector2{ (float)x * scale, (float)y * scale }), Vector2Add(offset, { 3, 3 })),
+                            10, 1, RED);
+                    }
+                }
 
                 int startX = 0;
                 int startY = 0;
                 int endX = 0;
                 int endY = 0;
-                getTilesOverlappedByBox(&startX, &startY, &endX, &endY, player.position, PLAYER_SIZE);
+                getTilesOverlappedByBox(&startX, &startY, &endX, &endY, { player.position.x, player.position.y - screenOffsetY }, PLAYER_SIZE);
 
                 for (int x = startX; x <= endX; x++) {
                     for (int y = startY; y <= endY; y++) {
-                        DrawRectangle(x * TILE_PIXELS, y * TILE_PIXELS, TILE_PIXELS, TILE_PIXELS, Fade(RED, 0.5));
+                        DrawRectangle(
+                            offset.x + x * TILE_PIXELS * scale + 1,
+                            offset.y + y * TILE_PIXELS * scale + 1,
+                            TILE_PIXELS * scale - 2,
+                            TILE_PIXELS * scale - 2,
+                            Fade(RED, 0.4));
                     }
                 }
             }
-
-            // Draw player, but relative to current screen
-            DrawCircleV(worldToScreen({ player.position.x, player.position.y - screenOffsetY }), TILE_PIXELS * PLAYER_SIZE.y, WHITE);
-
-            DrawText("Move with Left/Right Arrows.\nPress 'I' to enable debug mode", 4, 24, 20, WHITE);
 
             if (isDebugEnabled) {
                 DrawFPS(1, 1);
                 DrawText(TextFormat("player.position = [%f, %f]", player.position.x, player.position.y), 1, 110, 20, WHITE);
                 DrawText(TextFormat("player.jumpHoldTime = %f", player.jumpHoldTime), 1, 88, 20, WHITE);
-                DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 22*6, 20, WHITE);
-                DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 22*7, 20, WHITE);
+                DrawText(TextFormat("screenOffset = %f", screenOffsetY), 1, 22 * 6, 20, WHITE);
+                DrawText(TextFormat("screenIndex = %i", screenIndex), 1, 22 * 7, 20, WHITE);
             }
 
             EndDrawing();
