@@ -30,7 +30,7 @@
 // How fast player accelerates.
 #define PLAYER_SPEED 200.0f
 #define PLAYER_GROUND_FRICTION_X 70.0f
-#define PLAYER_JUMP_STRENGTH 16.0f
+#define PLAYER_JUMP_STRENGTH 15.0f
 
 struct Player {
     Vector2 position;
@@ -99,7 +99,7 @@ const Tilemap screenTilemaps[] = {
     {
         "#########      #",
         "#########    ###",
-        "########     ###",
+        "########      ##",
         "########      ##",
         "##########     #",
         "##########     #",
@@ -116,23 +116,23 @@ const Tilemap screenTilemaps[] = {
         "###         ####",
         "###          ###",
         "#####        ###",
+        "###          ###",
         "#            ###",
-        "#         ######",
-        "#          #####",
-        "#          #####",
+        "##        ######",
+        "##         #####",
+        "##         #####",
         "######     #####",
-        "#####      #####",
         "#####      #####",
     },
     {
         "#####      #####",
         "###      #######",
-        "###       ######",
-        "###         ####",
+        "##        ######",
+        "##          ####",
         "######      ####",
         "######       ###",
-        "######    #  ###",
-        "#####     #  ###",
+        "######   #   ###",
+        "#####    ##  ###",
         "#####        ###",
         "##           ###",
         "##        ######",
@@ -359,7 +359,7 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
 
     // Clamp velocity
     float vel = Vector2Length(player->velocity);
-    if (vel > 15.0) vel = 15.0;
+    if (vel > 25.0) vel = 25.0;
     player->velocity = Vector2Scale(Vector2Normalize(player->velocity), vel);
 
     player->position = Vector2Add(player->position, Vector2Scale(player->velocity, delta));
