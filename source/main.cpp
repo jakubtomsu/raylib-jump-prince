@@ -2,7 +2,7 @@
 #include "raymath.h" // Vector math
 #include <stdint.h>
 #include <stdio.h> // printf
-#include <assert.h> // for `assert`
+#include <assert.h> // assert
 
 #define TILEMAP_SIZE_X 16
 #define TILEMAP_SIZE_Y 12
@@ -26,11 +26,11 @@
 // Half-size of the player's box collider.
 #define PLAYER_SIZE Vector2{0.3f, 0.4f}
 // Gravity in units (tiles) per second
-#define PLAYER_GRAVITY 32.0f
+#define PLAYER_GRAVITY 30.0f
 // How fast player accelerates.
 #define PLAYER_SPEED 200.0f
 #define PLAYER_GROUND_FRICTION_X 70.0f
-#define PLAYER_JUMP_STRENGTH 18.0f
+#define PLAYER_JUMP_STRENGTH 16.0f
 
 struct Player {
     Vector2 position;
@@ -47,8 +47,6 @@ enum Tile { TILE_EMPTY = ' ', TILE_ZERO = '\0', TILE_FULL = '#' };
 // The '+ 1' is there for string null-termination, because
 // we're defining the tilemaps with strings.
 typedef uint8_t Tilemap[TILEMAP_SIZE_Y][TILEMAP_SIZE_X + 1];
-
-
 
 Tile tilemapGetTile(const Tilemap* tilemap, int x, int y) {
     if (x < 0 || x >= TILEMAP_SIZE_X) return OUTSIDE_TILE_HORIZONTAL;
@@ -84,47 +82,75 @@ const Tilemap screenTilemaps[] = {
         // Index zero is empty
         // This index is reserved for 'invalid tilemap'
     },
-    {
-        "#  ########    #",
-        "# ##      ##   #",
-        "# # #####  ### #",
-        "# # #   #  # # #",
-        "# # #####  # # #",
-        "# #        # # #",
-        "# #        # # #",
-        "# #        ### #",
-        "# #  ####  #   #",
-        "# #  #  #  #   #",
-        "# ####  ####   #",
-        "####      ######",
+     {
+        "################",
+        "#              #",
+        "# #### #### #  #",
+        "# #    #    #  #",
+        "# # ## # ## #  #",
+        "# #  # #  #    #",
+        "# #### #### #  #",
+        "#              #",
+        "#              #",
+        "#              #",
+        "#              #",
+        "#########      #",
     },
     {
-        "####      ######",
-        "###        #####",
-        "###  ###    ####",
-        "###  ##     ####",
-        "###       ######",
-        "###    #########",
-        "###  #    ######",
-        "###        #####",
+        "#########      #",
+        "#########    ###",
+        "########     ###",
+        "########      ##",
+        "##########     #",
+        "##########     #",
+        "########      ##",
+        "########      ##",
+        "##########    ##",
+        "######        ##",
+        "###           ##",
         "###         ####",
-        "##  ##      ####",
+    },
+    {
+        "###         ####",
+        "###    ##   ####",
+        "###         ####",
+        "###          ###",
+        "#####        ###",
+        "#            ###",
+        "#         ######",
+        "#          #####",
+        "#          #####",
+        "######     #####",
+        "#####      #####",
+        "#####      #####",
+    },
+    {
+        "#####      #####",
+        "###      #######",
+        "###       ######",
+        "###         ####",
+        "######      ####",
+        "######       ###",
+        "######    #  ###",
+        "#####     #  ###",
+        "#####        ###",
+        "##           ###",
         "##        ######",
-        "##        ######",
+        "##    ##########",
     },
     // Starting screen:
     {
-        "##        ######",
-        "######       ###",
-        "######        ##",
-        "######     #####",
+        "##    ##########",
+        "##            ##",
+        "####          ##",
+        "########       #",
+        "#####          #",
+        "##             #",
         "##       #######",
-        "#              #",
-        "#  #######   # #",
-        "#  ##    #   # #",
-        "#     ##     ###",
-        "###      # #####",
-        "#### #     #####",
+        "#        #######",
+        "#         ######",
+        "#####     ######",
+        "#####     ######",
         "################",
     },
 };
@@ -141,7 +167,6 @@ void getTilesOverlappedByBox(int* outStartX, int* outStartY, int* outEndX, int* 
     *outEndX = int(floorf(center.x + size.x));
     *outEndY = int(floorf(center.y + size.y));
 }
-
 
 // This function takes a box and a tilemap, and tries to make sure the box
 // doesn't intersect with the tilemap.
@@ -293,13 +318,13 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
         if (IsKeyReleased(KEY_SPACE)) {
             // Calculate strength based on how long the user held down the jump key.
             // The numbers are kind of random, you play with it yourself.
-            const float jumpStrength = Clamp(player->jumpHoldTime * 2.5f, 1.1f, 2.0f) / 2.0f;
+            const float jumpStrength = Clamp(player->jumpHoldTime * 2.6f, 1.1f, 2.0f) / 2.0f;
 
             // If the player doesn't press anything, the direction is up.
             Vector2 dir = { 0.0f, -1.0f };
-            const float xMoveStrength = 0.75f - (jumpStrength * 0.35f);
-            if (IsKeyDown(KEY_RIGHT)) dir.x += xMoveStrength;
-            if (IsKeyDown(KEY_LEFT)) dir.x -= xMoveStrength;
+            const float xMoveStrength = 0.75f - (jumpStrength * 0.5f);
+            if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) dir.x += xMoveStrength;
+            if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) dir.x -= xMoveStrength;
             // Make sure the vector is unit vector (length = 1.0).
             dir = Vector2Normalize(dir);
 
@@ -314,16 +339,16 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
         }
         else {
             player->jumpHoldTime = 0.0f;
-            if (IsKeyDown(KEY_RIGHT)) {
+            if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) {
                 player->velocity.x += PLAYER_SPEED * delta;
                 player->isFacingRight = true;
             }
-            if (IsKeyDown(KEY_LEFT)) {
+            if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) {
                 player->velocity.x -= PLAYER_SPEED * delta;
                 player->isFacingRight = false;
             }
 
-            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_LEFT)) {
+            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_A)) {
                 player->animTime = 0;
             }
         }
@@ -331,6 +356,11 @@ void updatePlayer(Player* player, const Tilemap* tilemap, float tilemapHeight, f
     else {
         player->jumpHoldTime = 0.0f;
     }
+
+    // Clamp velocity
+    float vel = Vector2Length(player->velocity);
+    if (vel > 15.0) vel = 15.0;
+    player->velocity = Vector2Scale(Vector2Normalize(player->velocity), vel);
 
     player->position = Vector2Add(player->position, Vector2Scale(player->velocity, delta));
 }
@@ -356,8 +386,10 @@ int main(int argc, const char** argv) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(initialScreenWidth * 3, initialScreenHeight * 3, "raylib [core] example - keyboard input");
     SetTargetFPS(60); // Set our game to run at 60 frames-per-second when possible
+    SetExitKey(KEY_NULL);
 
-    // Set the Current Working Directory to the .exe folder
+    // Set the Current Working Directory to the .exe folder.
+    // This is necesarry for loading files shipped relative to the executable.
     {
         int numSplit = 0;
         const char** split = TextSplit(argv[0], '\\', &numSplit);
@@ -405,6 +437,12 @@ int main(int argc, const char** argv) {
             if (GetScreenHeight() < VIEW_PIXELS_Y) {
                 SetWindowSize(GetScreenWidth(), VIEW_PIXELS_Y);
             }
+
+            if(isDebugEnabled) {
+                // Move screens
+                if (IsKeyPressed(KEY_PAGE_UP)) player.position.y -= TILEMAP_SIZE_Y;
+                if (IsKeyPressed(KEY_PAGE_DOWN)) player.position.y += TILEMAP_SIZE_Y;
+            }
         }
 
         // Draw world to pixelart texture
@@ -432,6 +470,7 @@ int main(int argc, const char** argv) {
                     int spriteX = 0;
                     int spriteY = 0;
 
+                    // This logic is bit of a hack...
                     switch (tile) {
                     case TILE_FULL: {
                         spriteX = 1;
@@ -488,6 +527,7 @@ int main(int argc, const char** argv) {
 
                 player.animTime += delta;
 
+                // Pick an sprite/animation based on player state
                 if (player.isOnGround) {
                     sprite = 0;
 
@@ -540,7 +580,13 @@ int main(int argc, const char** argv) {
                 int startY = 0;
                 int endX = 0;
                 int endY = 0;
-                getTilesOverlappedByBox(&startX, &startY, &endX, &endY, { player.position.x, player.position.y - screenOffsetY }, PLAYER_SIZE);
+                getTilesOverlappedByBox(
+                    &startX,
+                    &startY,
+                    &endX,
+                    &endY,
+                    { player.position.x, player.position.y - screenOffsetY },
+                    PLAYER_SIZE);
 
                 for (int x = startX; x <= endX; x++) {
                     for (int y = startY; y <= endY; y++) {
@@ -567,7 +613,6 @@ int main(int argc, const char** argv) {
     }
 
     // Shutdown
-    // --------
 
     CloseWindow(); // Close window and OpenGL context
 
